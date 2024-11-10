@@ -1,7 +1,7 @@
 use image::{imageops, DynamicImage, GenericImageView, GrayImage, ImageBuffer, Pixel};
 
 use std::borrow::Cow;
-use std::ops;
+use std::ops::Deref;
 
 /// Interface for types used for storing hash data.
 ///
@@ -148,7 +148,7 @@ pub trait DiffImage {
 
 #[cfg(not(feature = "nightly"))]
 impl<P: 'static, C: 'static> Image for ImageBuffer<P, C>
-    where P: Pixel<Subpixel = u8>, C: ops::Deref<Target=[u8]> {
+    where P: Pixel<Subpixel = u8>, C: Deref<Target=[u8]> + Deref {
     type Buf = ImageBuffer<P, Vec<u8>>;
 
     fn to_grayscale(&self) -> Cow<GrayImage> {
@@ -164,7 +164,7 @@ impl<P: 'static, C: 'static> Image for ImageBuffer<P, C>
 
 #[cfg(feature = "nightly")]
 impl<P: 'static, C: 'static> Image for ImageBuffer<P, C>
-    where P: Pixel<Subpixel = u8>, C: ops::Deref<Target=[u8]> {
+    where P: Pixel<Subpixel = u8>, C: Deref<Target=[u8]> + Deref {
     type Buf = ImageBuffer<P, Vec<u8>>;
 
     default fn to_grayscale(&self) -> Cow<GrayImage> {
@@ -188,7 +188,7 @@ impl Image for DynamicImage {
     type Buf = image::RgbaImage;
 
     fn to_grayscale(&self) -> Cow<GrayImage> {
-        self.as_luma8().map_or_else(|| Cow::Owned(self.to_luma()), Cow::Borrowed)
+        self.as_luma8().map_or_else(|| Cow::Owned(self.to_luma8()), Cow::Borrowed)
     }
 
     fn blur(&self, sigma: f32) -> Self::Buf { imageops::blur(self, sigma) }
@@ -200,11 +200,22 @@ impl Image for DynamicImage {
 
 #[cfg(feature = "nightly")]
 impl Image for GrayImage {
-    // type Buf = GrayImage;
+    type Buf = GrayImage;
 
     // Avoids copying
     fn to_grayscale(&self) -> Cow<GrayImage> {
         Cow::Borrowed(self)
+    }
+
+    fn blur(&self, sigma: f32) -> Self::Buf {
+        imageops::blur(self, sigma)
+    }
+
+    fn foreach_pixel8<F>(&self, foreach: F)
+    where
+        F: FnMut(u32, u32, &[u8])
+    {
+        self.enumerate_pixels().for_each(|(x, y, px)| foreach(x, y, px.channels()))
     }
 }
 
